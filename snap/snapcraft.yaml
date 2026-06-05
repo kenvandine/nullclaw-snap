@@ -1,0 +1,89 @@
+name: nullclaw
+base: core24
+adopt-info: nullclaw
+title: NullClaw
+summary: Lightweight local-first autonomous AI assistant
+description: |
+  NullClaw is a lightweight, local-first autonomous AI assistant — a static
+  binary that boots in milliseconds with no runtime dependencies beyond libc.
+  It connects to locally-running AI model servers (Lemonade, Ollama) and
+  exposes a gateway for chat channels (Telegram, Discord, Signal, web UI)
+  and agentic tasks such as file operations, code execution, and scheduled
+  jobs.
+
+  On first launch the service automatically detects running Lemonade and
+  Ollama instances and configures them as providers, with Lemonade as the
+  preferred default.  No cloud account or API key is required.
+
+  Run the interactive setup wizard at any time:
+
+    nullclaw onboard
+
+  The background gateway service starts automatically the first time you run
+  any nullclaw command and is managed as a standard systemd user unit:
+
+    systemctl --user status nullclaw
+    systemctl --user stop nullclaw
+
+source-code: https://github.com/nullclaw/nullclaw
+issues: https://github.com/nullclaw/nullclaw/issues
+contact: https://github.com/nullclaw/nullclaw/issues
+
+grade: stable
+confinement: classic
+
+apps:
+  # Interactive CLI — onboarding wizard, config editing, status checks, etc.
+  nullclaw:
+    command: bin/nullclaw-launch
+
+  # Gateway daemon — registered as /snap/bin/nullclaw.daemon so the snap
+  # wrapper sets up $SNAP and friends before exec-ing the launch script.
+  # Managed by the systemd user unit installed on first run of 'nullclaw'.
+  daemon:
+    command: bin/nullclaw-daemon-launch
+
+parts:
+  launcher:
+    plugin: dump
+    source: snap/local
+    organize:
+      bin/nullclaw-launch: bin/nullclaw-launch
+      bin/nullclaw-daemon-launch: bin/nullclaw-daemon-launch
+      bin/setup-providers: bin/setup-providers
+      share/systemd/user/nullclaw.service: share/systemd/user/nullclaw.service
+
+  nullclaw:
+    plugin: nil
+    override-pull: |
+      # Fetch the latest release tag from GitHub.
+      VERSION=$(curl -fsSL \
+        "https://api.github.com/repos/nullclaw/nullclaw/releases/latest" \
+        | grep '"tag_name"' | head -1 \
+        | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+      if [ -z "$VERSION" ]; then
+        echo "nullclaw: failed to determine latest release version" >&2
+        exit 1
+      fi
+      craftctl set version="${VERSION#v}"
+
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64)   ARCH="x86_64" ;;
+        arm64)   ARCH="aarch64" ;;
+        armhf)   ARCH="arm32-gnu" ;;
+        riscv64) ARCH="riscv64" ;;
+        *) echo "nullclaw: unsupported architecture: $CRAFT_ARCH_BUILD_FOR" >&2; exit 1 ;;
+      esac
+
+      BINARY="nullclaw-linux-${ARCH}.bin"
+      echo "nullclaw: downloading ${BINARY} (${VERSION})"
+      curl -fsSL \
+        "https://github.com/nullclaw/nullclaw/releases/download/${VERSION}/${BINARY}" \
+        -o "$CRAFT_PART_SRC/nullclaw"
+      chmod +x "$CRAFT_PART_SRC/nullclaw"
+    override-build: |
+      install -Dm755 "$CRAFT_PART_SRC/nullclaw" "$CRAFT_PART_INSTALL/bin/nullclaw"
+    build-packages:
+      - curl
+    stage-packages:
+      - curl

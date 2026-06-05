@@ -1,0 +1,125 @@
+#!/bin/sh
+# setup-providers — probes for local Lemonade and Ollama instances, configures
+# whichever are running as providers, and writes a minimal config.json.
+# Lemonade is preferred (primary) when both are present; Ollama becomes the
+# fallback.  Exits 0 on success, 1 if neither service is reachable.
+
+CURL="${SNAP}/usr/bin/curl"
+
+HOME_DIR="${HOME}"
+CONFIG_DIR="${HOME_DIR}/.nullclaw"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
+WORKSPACE="${HOME_DIR}/workspace"
+
+probe_models() {
+  "$CURL" -sf --connect-timeout 3 --max-time 5 "${1}/models" 2>/dev/null \
+    | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | sed 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+}
+
+score_model() {
+  local id lower score
+  id="$1"
+  lower=$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')
+  case "$lower" in
+    *flux*|*sdxl*|*stable?diff*) printf '%s\n' -30; return ;;
+    *kokoro*|*whisper*|*tts*|*speech*) printf '%s\n' -20; return ;;
+    *embed*|*retriev*) printf '%s\n' -20; return ;;
+  esac
+  score=0
+  case "$lower" in *flm*)      score=$((score + 20)) ;; esac
+  case "$lower" in *gguf*)     score=$((score + 10)) ;; esac
+  case "$lower" in *instruct*|*-it-*|*chat*) score=$((score + 5)) ;; esac
+  printf '%s\n' "$score"
+}
+
+pick_best() {
+  local best_id best_score id s
+  best_id=""
+  best_score=-999
+  while IFS= read -r id; do
+    [ -z "$id" ] && continue
+    s=$(score_model "$id")
+    if [ "$s" -ge 0 ] && [ "$s" -gt "$best_score" ]; then
+      best_score="$s"
+      best_id="$id"
+    fi
+  done
+  [ -n "$best_id" ] && printf '%s\n' "$best_id"
+}
+
+LEMONADE_MODELS=$(probe_models "http://localhost:8000/api/v1")
+OLLAMA_MODELS=$(probe_models "http://localhost:11434/v1")
+
+if [ -z "$LEMONADE_MODELS" ] && [ -z "$OLLAMA_MODELS" ]; then
+  printf 'nullclaw: no local providers found (lemonade, ollama)\n' >&2
+  exit 1
+fi
+
+LEMONADE_BEST=$(printf '%s\n' "$LEMONADE_MODELS" | pick_best)
+OLLAMA_BEST=$(printf '%s\n' "$OLLAMA_MODELS"    | pick_best)
+
+PRIMARY=""
+FALLBACK_MODEL=""
+
+if [ -n "$LEMONADE_BEST" ]; then
+  PRIMARY="lemonade/${LEMONADE_BEST}"
+  LEMONADE_COUNT=$(printf '%s\n' "$LEMONADE_MODELS" | grep -c .)
+  printf 'nullclaw: found lemonade with %s model(s), best: %s\n' \
+    "$LEMONADE_COUNT" "$LEMONADE_BEST"
+fi
+
+if [ -n "$OLLAMA_BEST" ]; then
+  OLLAMA_COUNT=$(printf '%s\n' "$OLLAMA_MODELS" | grep -c .)
+  printf 'nullclaw: found ollama with %s model(s), best: %s\n' \
+    "$OLLAMA_COUNT" "$OLLAMA_BEST"
+  if [ -z "$PRIMARY" ]; then
+    PRIMARY="ollama/${OLLAMA_BEST}"
+  else
+    FALLBACK_MODEL="ollama/${OLLAMA_BEST}"
+  fi
+fi
+
+PROVIDERS_JSON=""
+if [ -n "$LEMONADE_MODELS" ]; then
+  PROVIDERS_JSON='      "lemonade": {"base_url": "http://localhost:8000", "api_key": "lemonade"}'
+fi
+if [ -n "$OLLAMA_MODELS" ]; then
+  if [ -n "$PROVIDERS_JSON" ]; then
+    PROVIDERS_JSON="${PROVIDERS_JSON},"$'\n'
+  fi
+  PROVIDERS_JSON="${PROVIDERS_JSON}"'      "ollama": {"base_url": "http://localhost:11434"}'
+fi
+
+FALLBACKS_JSON=""
+if [ -n "$FALLBACK_MODEL" ]; then
+  FALLBACKS_JSON=$(printf ',\n        "fallbacks": ["%s"]' "$FALLBACK_MODEL")
+fi
+
+mkdir -p "$CONFIG_DIR"
+cat > "$CONFIG_FILE" << NULLCLAW_CFG
+{
+  "models": {
+    "providers": {
+${PROVIDERS_JSON}
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "${PRIMARY}"${FALLBACKS_JSON}
+      },
+      "workspace": "${WORKSPACE}"
+    }
+  },
+  "gateway": {
+    "port": 3000,
+    "require_pairing": false
+  }
+}
+NULLCLAW_CFG
+
+printf 'nullclaw: primary model -> %s\n' "$PRIMARY"
+if [ -n "$FALLBACK_MODEL" ]; then
+  printf 'nullclaw: fallback model -> %s\n' "$FALLBACK_MODEL"
+fi

@@ -1,0 +1,11 @@
+[Unit]
+Description=NullClaw gateway service
+After=network.target
+
+[Service]
+ExecStart=/snap/bin/nullclaw.daemon
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target

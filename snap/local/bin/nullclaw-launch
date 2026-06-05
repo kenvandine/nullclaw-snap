@@ -1,0 +1,14 @@
+#!/bin/sh
+# nullclaw-launch — wrapper that installs the gateway service on first run.
+
+mkdir -p "$HOME/workspace"
+
+# Install and enable the gateway service on first run.
+if ! systemctl --user is-enabled nullclaw >/dev/null 2>&1; then
+  mkdir -p "$HOME/.config/systemd/user"
+  cp "$SNAP/share/systemd/user/nullclaw.service" "$HOME/.config/systemd/user/nullclaw.service"
+  systemctl --user daemon-reload 2>/dev/null || true
+  systemctl --user enable --now nullclaw 2>/dev/null || true
+fi
+
+exec "$SNAP/bin/nullclaw" "$@"
