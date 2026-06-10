@@ -1,0 +1,145 @@
+#!/bin/sh
+# nullclaw-lemonade — interactive Lemonade model picker for NullClaw.
+#
+# Probes the local lemonade-server, presents a TUI to choose one of its loaded
+# models, writes that choice into ~/.nullclaw/config.json as the primary model,
+# and restarts the gateway so the change takes effect immediately.
+#
+# Run as:  nullclaw.lemonade
+#
+# NullClaw ships as a dependency-free static binary, so this picker is pure
+# POSIX sh + curl rather than the Node TUI used by Node-based claw snaps.
+# It shares NullClaw's config schema with snap/local/bin/setup-providers,
+# which performs the same write non-interactively on first daemon start.
+
+CURL="${SNAP}/usr/bin/curl"
+
+# Per-snap parameters (mirrors the env-driven constants in the Node template).
+CLI="${CLAW_CLI_NAME:-nullclaw}"
+LEMONADE_HOST="${CLAW_LEMONADE_HOST:-127.0.0.1}"
+LEMONADE_PORT="${CLAW_LEMONADE_PORT:-13305}"
+LEMONADE_BASE="http://${LEMONADE_HOST}:${LEMONADE_PORT}"
+LEMONADE_API="${LEMONADE_BASE}/api/v1"
+
+HOME_DIR="${HOME}"
+CONFIG_DIR="${HOME_DIR}/.${CLI}"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
+WORKSPACE="${HOME_DIR}/workspace"
+SERVICE_NAME="${CLI}"
+
+log() { printf '%s: %s\n' "$CLI" "$1"; }
+err() { printf '%s: %s\n' "$CLI" "$1" >&2; }
+
+probe_models() {
+  "$CURL" -sf --connect-timeout 3 --max-time 5 "${LEMONADE_API}/models" 2>/dev/null \
+    | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' \
+    | sed 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+}
+
+# Models that are not chat/completion models; hide them from the picker.
+is_non_chat() {
+  lower=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+  case "$lower" in
+    *flux*|*sdxl*|*stable?diff*) return 0 ;;
+    *kokoro*|*whisper*|*tts*|*speech*) return 0 ;;
+    *embed*|*retriev*|*rerank*) return 0 ;;
+  esac
+  return 1
+}
+
+write_config() {
+  primary="$1"
+  mkdir -p "$CONFIG_DIR"
+  cat > "$CONFIG_FILE" << NULLCLAW_CFG
+{
+  "models": {
+    "providers": {
+      "lemonade": {"base_url": "${LEMONADE_BASE}", "api_key": "lemonade"}
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "${primary}"
+      },
+      "workspace": "${WORKSPACE}"
+    }
+  },
+  "gateway": {
+    "port": 3000,
+    "require_pairing": false
+  }
+}
+NULLCLAW_CFG
+}
+
+ALL_MODELS=$(probe_models)
+if [ -z "$ALL_MODELS" ]; then
+  err "lemonade-server not detected at ${LEMONADE_HOST}:${LEMONADE_PORT}"
+  err "start lemonade-server, then run '${CLI}.lemonade' again"
+  exit 1
+fi
+
+# Keep only chat-capable models for the menu.
+MODELS=""
+for m in $ALL_MODELS; do
+  is_non_chat "$m" && continue
+  MODELS="${MODELS}${m}
+"
+done
+# Trim, then count. If the filter left nothing (every loaded model was
+# image/audio/embedding), fall back to the full list so the user can still pick.
+MODELS=$(printf '%s' "$MODELS" | sed '/^$/d')
+COUNT=$(printf '%s\n' "$MODELS" | grep -c .)
+if [ "$COUNT" -eq 0 ]; then
+  MODELS=$(printf '%s\n' "$ALL_MODELS" | sed '/^$/d')
+  COUNT=$(printf '%s\n' "$MODELS" | grep -c .)
+fi
+if [ "$COUNT" -eq 0 ]; then
+  err "lemonade-server has no chat models loaded"
+  exit 1
+fi
+
+# Non-interactive (no TTY): pick the first chat model and configure silently.
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+  SELECTED=$(printf '%s\n' "$MODELS" | head -1)
+  write_config "lemonade/${SELECTED}"
+  log "configured lemonade/${SELECTED} (non-interactive)"
+  systemctl --user restart "$SERVICE_NAME" >/dev/null 2>&1 || true
+  exit 0
+fi
+
+printf '\nNullClaw detected Lemonade at %s.\n' "$LEMONADE_API"
+printf 'Choose a model to use as the primary provider:\n\n'
+
+i=1
+printf '%s\n' "$MODELS" | while IFS= read -r m; do
+  [ -z "$m" ] && continue
+  printf '  %d. %s\n' "$i" "$m"
+  i=$((i + 1))
+done
+printf '\n'
+
+while true; do
+  printf 'Model number [1]: '
+  read -r choice
+  [ -z "$choice" ] && choice=1
+  case "$choice" in
+    ''|*[!0-9]*) continue ;;
+  esac
+  if [ "$choice" -ge 1 ] && [ "$choice" -le "$COUNT" ]; then
+    break
+  fi
+done
+
+SELECTED=$(printf '%s\n' "$MODELS" | sed -n "${choice}p")
+
+write_config "lemonade/${SELECTED}"
+log "primary model -> lemonade/${SELECTED}"
+log "wrote ${CONFIG_FILE}"
+
+if systemctl --user restart "$SERVICE_NAME" >/dev/null 2>&1; then
+  log "restarted the gateway service"
+else
+  log "run 'systemctl --user restart ${SERVICE_NAME}' to apply"
+fi

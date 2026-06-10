@@ -48,7 +48,9 @@ pick_best() {
   [ -n "$best_id" ] && printf '%s\n' "$best_id"
 }
 
-LEMONADE_MODELS=$(probe_models "http://localhost:8000/api/v1")
+# lemonade-server listens on 13305 (the snap default); keep this in sync with
+# nullclaw-lemonade and the Node claw template's CLAW_LEMONADE_PORT default.
+LEMONADE_MODELS=$(probe_models "http://127.0.0.1:13305/api/v1")
 OLLAMA_MODELS=$(probe_models "http://localhost:11434/v1")
 
 if [ -z "$LEMONADE_MODELS" ] && [ -z "$OLLAMA_MODELS" ]; then
@@ -80,13 +82,17 @@ if [ -n "$OLLAMA_BEST" ]; then
   fi
 fi
 
+# Real newline, used to join provider entries.  This script runs under
+# /bin/sh (dash), where $'\n' is NOT supported and would emit a literal "\n".
+NL='
+'
 PROVIDERS_JSON=""
 if [ -n "$LEMONADE_MODELS" ]; then
-  PROVIDERS_JSON='      "lemonade": {"base_url": "http://localhost:8000", "api_key": "lemonade"}'
+  PROVIDERS_JSON='      "lemonade": {"base_url": "http://127.0.0.1:13305", "api_key": "lemonade"}'
 fi
 if [ -n "$OLLAMA_MODELS" ]; then
   if [ -n "$PROVIDERS_JSON" ]; then
-    PROVIDERS_JSON="${PROVIDERS_JSON},"$'\n'
+    PROVIDERS_JSON="${PROVIDERS_JSON},${NL}"
   fi
   PROVIDERS_JSON="${PROVIDERS_JSON}"'      "ollama": {"base_url": "http://localhost:11434"}'
 fi

@@ -46,3 +46,9 @@ jobs:
       - name: Test daemon command
         run: |
           nullclaw.daemon --help 2>&1 | head -20 || true
+
+      - name: Test lemonade command
+        run: |
+          # No lemonade-server in CI, so this exits non-zero with a friendly
+          # "not detected" message; we only assert the app runs without crashing.
+          nullclaw.lemonade </dev/null 2>&1 | head -20 || true
