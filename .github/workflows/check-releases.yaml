@@ -31,7 +31,7 @@ jobs:
       - name: Get current version
         id: current
         run: |
-          VERSION=$(grep -m1 '^version:' snapcraft.yaml | awk '{print $2}' | tr -d '"' || echo "0.0.0")
+          VERSION=$(grep -m1 '^version:' snap/snapcraft.yaml | awk '{print $2}' | tr -d '"' || echo "0.0.0")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Compare versions
