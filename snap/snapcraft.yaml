@@ -25,9 +25,11 @@ description: |
     systemctl --user status nullclaw
     systemctl --user stop nullclaw
 
-source-code: https://github.com/nullclaw/nullclaw
-issues: https://github.com/nullclaw/nullclaw/issues
-contact: https://github.com/nullclaw/nullclaw/issues
+source-code: https://github.com/kenvandine/nullclaw-snap
+issues: https://github.com/kenvandine/nullclaw-snap/issues
+contact: https://github.com/kenvandine/nullclaw-snap/issues
+website: https://nullclaw.io
+license: MIT
 
 grade: stable
 confinement: classic

@@ -48,3 +48,13 @@ systemctl --user start nullclaw
 **Auto provider detection** — On first start, `setup-providers` probes for Lemonade (port 13305) and Ollama (port 11434). If found, it writes `~/.nullclaw/config.json` with the best available model as primary. No cloud account or API key required. For an interactive choice, use `nullclaw.lemonade` instead.
 
 **Classic confinement** — NullClaw performs agentic tasks (file operations, code execution, scheduled jobs) that require broad system access.
+
+## Links
+
+- Upstream project: <https://github.com/nullclaw/nullclaw> (https://nullclaw.io)
+- Snap packaging: <https://github.com/kenvandine/nullclaw-snap>
+- Report a snap issue: <https://github.com/kenvandine/nullclaw-snap/issues>
+
+## License
+
+NullClaw is licensed under **MIT**. This snap packaging lives in [kenvandine/nullclaw-snap](https://github.com/kenvandine/nullclaw-snap).
