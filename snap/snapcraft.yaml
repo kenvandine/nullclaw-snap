@@ -57,6 +57,13 @@ apps:
     environment:
       CLAW_CLI_NAME: nullclaw
 
+  # Interactive inference snap picker.  Run as: nullclaw.inference-snap
+  inference-snap:
+    command: bin/nullclaw-inference-snap
+    environment:
+      CLAW_CLI_NAME: nullclaw
+      CLAW_INFERENCE_SNAPS: "gemma3 gemma4 deepseek-r1 nemotron-3-nano nemotron-3-nano-omni qwen-vl"
+
   # Gateway daemon — registered as /snap/bin/nullclaw.daemon so the snap
   # wrapper sets up $SNAP and friends before exec-ing the launch script.
   # Managed by the systemd user unit installed on first run of 'nullclaw'.
@@ -71,6 +78,7 @@ parts:
       bin/nullclaw-launch: bin/nullclaw-launch
       bin/nullclaw-daemon-launch: bin/nullclaw-daemon-launch
       bin/nullclaw-lemonade: bin/nullclaw-lemonade
+      bin/nullclaw-inference-snap: bin/nullclaw-inference-snap
       bin/setup-providers: bin/setup-providers
       share/systemd/user/nullclaw.service: share/systemd/user/nullclaw.service
 

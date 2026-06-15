@@ -1,8 +1,8 @@
 #!/bin/sh
-# setup-providers — probes for local Lemonade and Ollama instances, configures
-# whichever are running as providers, and writes a minimal config.json.
-# Lemonade is preferred (primary) when both are present; Ollama becomes the
-# fallback.  Exits 0 on success, 1 if neither service is reachable.
+# setup-providers — probes for local Lemonade, Canonical inference snaps, and
+# Ollama instances, configures whichever are running as providers, and writes a
+# minimal config.json.  Priority: Lemonade > inference snap > Ollama.
+# Exits 0 on success, 1 if no provider is reachable.
 
 CURL="${SNAP}/usr/bin/curl"
 
@@ -48,13 +48,39 @@ pick_best() {
   [ -n "$best_id" ] && printf '%s\n' "$best_id"
 }
 
+# Probe for inference snaps.  Returns the base URL for the first installed and
+# responding snap, along with the snap name and best model id.
+INFERENCE_SNAPS="${CLAW_INFERENCE_SNAPS:-gemma3 gemma4 deepseek-r1 nemotron-3-nano nemotron-3-nano-omni qwen-vl}"
+
+ISNAP_NAME=""
+ISNAP_URL=""
+ISNAP_MODEL=""
+
+for _sname in $INFERENCE_SNAPS; do
+  snap list "$_sname" >/dev/null 2>&1 || continue
+  _host=$("$_sname" get http.host 2>/dev/null)
+  _port=$("$_sname" get http.port 2>/dev/null)
+  _bpath=$("$_sname" get http.base-path 2>/dev/null)
+  [ -z "$_port" ] && continue
+  _host="${_host:-127.0.0.1}"
+  _bpath="${_bpath:-v1}"
+  _url="http://${_host}:${_port}/${_bpath}"
+  _mid=$(probe_models "$_url" | pick_best)
+  [ -z "$_mid" ] && continue
+  ISNAP_NAME="$_sname"
+  ISNAP_URL="$_url"
+  ISNAP_MODEL="$_mid"
+  printf 'nullclaw: found inference snap %s with model: %s\n' "$_sname" "$_mid"
+  break
+done
+
 # lemonade-server listens on 13305 (the snap default); keep this in sync with
 # nullclaw-lemonade and the Node claw template's CLAW_LEMONADE_PORT default.
 LEMONADE_MODELS=$(probe_models "http://127.0.0.1:13305/api/v1")
 OLLAMA_MODELS=$(probe_models "http://localhost:11434/v1")
 
-if [ -z "$LEMONADE_MODELS" ] && [ -z "$OLLAMA_MODELS" ]; then
-  printf 'nullclaw: no local providers found (lemonade, ollama)\n' >&2
+if [ -z "$LEMONADE_MODELS" ] && [ -z "$ISNAP_NAME" ] && [ -z "$OLLAMA_MODELS" ]; then
+  printf 'nullclaw: no local providers found (lemonade, inference snap, ollama)\n' >&2
   exit 1
 fi
 
@@ -71,13 +97,21 @@ if [ -n "$LEMONADE_BEST" ]; then
     "$LEMONADE_COUNT" "$LEMONADE_BEST"
 fi
 
+if [ -n "$ISNAP_MODEL" ]; then
+  if [ -z "$PRIMARY" ]; then
+    PRIMARY="${ISNAP_NAME}/${ISNAP_MODEL}"
+  elif [ -z "$FALLBACK_MODEL" ]; then
+    FALLBACK_MODEL="${ISNAP_NAME}/${ISNAP_MODEL}"
+  fi
+fi
+
 if [ -n "$OLLAMA_BEST" ]; then
   OLLAMA_COUNT=$(printf '%s\n' "$OLLAMA_MODELS" | grep -c .)
   printf 'nullclaw: found ollama with %s model(s), best: %s\n' \
     "$OLLAMA_COUNT" "$OLLAMA_BEST"
   if [ -z "$PRIMARY" ]; then
     PRIMARY="ollama/${OLLAMA_BEST}"
-  else
+  elif [ -z "$FALLBACK_MODEL" ]; then
     FALLBACK_MODEL="ollama/${OLLAMA_BEST}"
   fi
 fi
@@ -89,6 +123,12 @@ NL='
 PROVIDERS_JSON=""
 if [ -n "$LEMONADE_MODELS" ]; then
   PROVIDERS_JSON='      "lemonade": {"base_url": "http://127.0.0.1:13305", "api_key": "lemonade"}'
+fi
+if [ -n "$ISNAP_NAME" ]; then
+  if [ -n "$PROVIDERS_JSON" ]; then
+    PROVIDERS_JSON="${PROVIDERS_JSON},${NL}"
+  fi
+  PROVIDERS_JSON="${PROVIDERS_JSON}      \"${ISNAP_NAME}\": {\"base_url\": \"${ISNAP_URL}\"}"
 fi
 if [ -n "$OLLAMA_MODELS" ]; then
   if [ -n "$PROVIDERS_JSON" ]; then
