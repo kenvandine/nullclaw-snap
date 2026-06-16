@@ -15,6 +15,9 @@ description: |
   Ollama instances and configures them as providers, with Lemonade as the
   preferred default.  No cloud account or API key is required.
 
+  Run 'nullclaw.inference-snap' to pick a Canonical inference snap
+  (gemma4, gemma3, deepseek-r1, and others) as the primary provider.
+
   Run the interactive setup wizard at any time:
 
     nullclaw onboard
