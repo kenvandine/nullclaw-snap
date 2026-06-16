@@ -19,9 +19,10 @@ sudo snap install --classic nullclaw_<version>_amd64.snap --dangerous
 ## Usage
 
 ```
-nullclaw onboard     # first-run setup wizard
-nullclaw             # interactive CLI
-nullclaw.lemonade    # pick a local Lemonade model (interactive TUI)
+nullclaw onboard          # first-run setup wizard
+nullclaw                  # interactive CLI
+nullclaw.lemonade         # pick a local Lemonade model (interactive TUI)
+nullclaw.inference-snap   # pick a Canonical inference snap (interactive TUI)
 ```
 
 ### Local AI with Lemonade
@@ -32,6 +33,19 @@ as NullClaw's primary provider. It writes `~/.nullclaw/config.json` and restarts
 the gateway so the change takes effect immediately. Re-run it any time to switch
 models. Because NullClaw is a dependency-free static binary, this picker is a pure
 POSIX-sh + curl TUI (rather than the Node TUI used by Node-based claw snaps).
+
+### Local AI with Canonical inference snaps
+
+`nullclaw.inference-snap` detects installed [Canonical inference snaps](https://snapcraft.io/search?q=inference)
+such as `gemma4`, `gemma3`, `deepseek-r1`, `nemotron-3-nano`, or `qwen-vl`, probes
+their OpenAI-compatible API, and lets you choose one as NullClaw's primary provider.
+It writes `~/.nullclaw/config.json` and restarts the gateway so the change takes
+effect immediately. Re-run it any time to switch models.
+
+```
+sudo snap install gemma4
+nullclaw.inference-snap
+```
 
 The background gateway service is installed and enabled as a systemd user unit the first time any `nullclaw` command is run:
 
