@@ -92,6 +92,7 @@ parts:
       bin/nullclaw-ui-launch: bin/nullclaw-ui-launch
       bin/setup-providers: bin/setup-providers
       share/systemd/user/nullclaw.service: share/systemd/user/nullclaw.service
+      share/systemd/user/nullclaw-ui.service: share/systemd/user/nullclaw-ui.service
 
   nullclaw:
     plugin: nil

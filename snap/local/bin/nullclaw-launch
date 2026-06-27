@@ -7,15 +7,21 @@ mkdir -p "$HOME/workspace"
 # bundled copy changes (e.g. after a snap refresh) so updates actually land,
 # rather than only installing once on the very first run.
 SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
-SERVICE_NAME="nullclaw"
-UNIT_PATH="$SYSTEMD_USER_DIR/${SERVICE_NAME}.service"
 mkdir -p "$SYSTEMD_USER_DIR"
-if [ ! -f "$UNIT_PATH" ] || ! cmp -s "$SNAP/share/systemd/user/${SERVICE_NAME}.service" "$UNIT_PATH"; then
-  cp "$SNAP/share/systemd/user/${SERVICE_NAME}.service" "$UNIT_PATH"
-  systemctl --user daemon-reload 2>/dev/null || true
-fi
-if ! systemctl --user is-enabled "$SERVICE_NAME" >/dev/null 2>&1; then
-  systemctl --user enable --now "$SERVICE_NAME" 2>/dev/null || true
-fi
+
+install_service() {
+  local name="$1"
+  local unit_path="$SYSTEMD_USER_DIR/${name}.service"
+  if [ ! -f "$unit_path" ] || ! cmp -s "$SNAP/share/systemd/user/${name}.service" "$unit_path"; then
+    cp "$SNAP/share/systemd/user/${name}.service" "$unit_path"
+    systemctl --user daemon-reload 2>/dev/null || true
+  fi
+  if ! systemctl --user is-enabled "$name" >/dev/null 2>&1; then
+    systemctl --user enable --now "$name" 2>/dev/null || true
+  fi
+}
+
+install_service nullclaw
+install_service nullclaw-ui
 
 exec "$SNAP/bin/nullclaw" "$@"

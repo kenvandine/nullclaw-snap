@@ -3,4 +3,4 @@
 # Connects to the nullclaw WebSocket gateway at ws://127.0.0.1:3000/ws by default.
 exec "$SNAP/bin/node" \
   "$SNAP/share/nullclaw-chat-ui/bin/nullclaw-chat-ui.js" \
-  run --host 127.0.0.1 --port 4173 "$@"
+  run --host 0.0.0.0 --port 4173 "$@"

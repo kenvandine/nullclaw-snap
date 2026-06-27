@@ -1,0 +1,12 @@
+[Unit]
+Description=NullClaw chat UI
+After=network.target nullclaw.service
+Wants=nullclaw.service
+
+[Service]
+ExecStart=/snap/bin/nullclaw.ui
+Restart=on-failure
+RestartSec=10s
+
+[Install]
+WantedBy=default.target
