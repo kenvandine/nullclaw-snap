@@ -18,4 +18,4 @@ if [ ! -f "$CONFIG_FILE" ]; then
   fi
 fi
 
-exec "$SNAP/bin/nullclaw" gateway
+exec "$SNAP/bin/nullclaw" gateway --host 0.0.0.0
