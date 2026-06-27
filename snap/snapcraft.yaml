@@ -67,6 +67,13 @@ apps:
       CLAW_CLI_NAME: nullclaw
       CLAW_INFERENCE_SNAPS: "gemma3 gemma4 deepseek-r1 nemotron-3-nano nemotron-3-nano-omni qwen-vl"
 
+  # Web chat UI — run as: nullclaw.ui
+  # Serves the bundled nullclaw-chat-ui at http://127.0.0.1:4173.
+  # Connects to the nullclaw WebSocket gateway at ws://127.0.0.1:3000/ws.
+  # Pass --port <port> to use a different port.
+  ui:
+    command: bin/nullclaw-ui-launch
+
   # Gateway daemon — registered as /snap/bin/nullclaw.daemon so the snap
   # wrapper sets up $SNAP and friends before exec-ing the launch script.
   # Managed by the systemd user unit installed on first run of 'nullclaw'.
@@ -82,6 +89,7 @@ parts:
       bin/nullclaw-daemon-launch: bin/nullclaw-daemon-launch
       bin/nullclaw-lemonade: bin/nullclaw-lemonade
       bin/nullclaw-inference-snap: bin/nullclaw-inference-snap
+      bin/nullclaw-ui-launch: bin/nullclaw-ui-launch
       bin/setup-providers: bin/setup-providers
       share/systemd/user/nullclaw.service: share/systemd/user/nullclaw.service
 
@@ -118,4 +126,44 @@ parts:
     build-packages:
       - curl
     stage-packages:
+      - curl
+
+  # Bundles Node.js so nullclaw.ui can serve the chat-ui without depending
+  # on the host having node installed (classic confinement, but still cleaner).
+  node:
+    plugin: npm
+    source: .
+    npm-include-node: true
+    npm-node-version: '22.16.0'
+    override-build: |
+      craftctl default
+
+  # Downloads the latest nullclaw-chat-ui release and stages the pre-built
+  # static site plus the pure-Node.js server script into the snap.
+  nullclaw-chat-ui:
+    plugin: nil
+    override-pull: |
+      VERSION=$(curl -fsSL \
+        "https://api.github.com/repos/nullclaw/nullclaw-chat-ui/releases/latest" \
+        | grep '"tag_name"' | head -1 \
+        | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')
+      if [ -z "$VERSION" ]; then
+        echo "nullclaw-chat-ui: failed to determine latest release version" >&2
+        exit 1
+      fi
+      TARBALL="nullclaw-chat-ui-${VERSION}.tar.gz"
+      echo "nullclaw-chat-ui: downloading ${TARBALL} (${VERSION})"
+      curl -fsSL \
+        "https://github.com/nullclaw/nullclaw-chat-ui/releases/download/${VERSION}/${TARBALL}" \
+        -o "$CRAFT_PART_SRC/${TARBALL}"
+      tar -xzf "$CRAFT_PART_SRC/${TARBALL}" -C "$CRAFT_PART_SRC"
+    override-build: |
+      install -d "$CRAFT_PART_INSTALL/share/nullclaw-chat-ui"
+      cp -r "$CRAFT_PART_SRC/nullclaw-chat-ui/build" \
+            "$CRAFT_PART_INSTALL/share/nullclaw-chat-ui/"
+      cp -r "$CRAFT_PART_SRC/nullclaw-chat-ui/bin" \
+            "$CRAFT_PART_INSTALL/share/nullclaw-chat-ui/"
+      cp "$CRAFT_PART_SRC/nullclaw-chat-ui/package.json" \
+         "$CRAFT_PART_INSTALL/share/nullclaw-chat-ui/"
+    build-packages:
       - curl
