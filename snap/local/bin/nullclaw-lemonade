@@ -53,20 +53,22 @@ for arg in "$@"; do
   _prev="$arg"
 done
 
-# Install (or refresh) the systemd user service unit.  Called by --auto so
-# the service is available even when the main launcher has not been run yet.
+# Install (or refresh) a systemd user service unit.  Called by --auto so
+# services are available even when the main launcher has not been run yet.
+# Accepts an optional service name; defaults to SERVICE_NAME (the gateway).
 _install_service_unit() {
-  local unit_src="$SNAP/share/systemd/user/${SERVICE_NAME}.service"
+  local svc="${1:-$SERVICE_NAME}"
+  local unit_src="$SNAP/share/systemd/user/${svc}.service"
   local unit_dir="$HOME/.config/systemd/user"
-  local unit_dst="$unit_dir/${SERVICE_NAME}.service"
+  local unit_dst="$unit_dir/${svc}.service"
   [ -f "$unit_src" ] || return 0
   mkdir -p "$unit_dir"
   if [ ! -f "$unit_dst" ] || ! cmp -s "$unit_src" "$unit_dst"; then
     cp "$unit_src" "$unit_dst"
     systemctl --user daemon-reload 2>/dev/null || true
   fi
-  if ! systemctl --user is-enabled "$SERVICE_NAME" >/dev/null 2>&1; then
-    systemctl --user enable --now "$SERVICE_NAME" 2>/dev/null || true
+  if ! systemctl --user is-enabled "$svc" >/dev/null 2>&1; then
+    systemctl --user enable --now "$svc" 2>/dev/null || true
   fi
 }
 
@@ -184,6 +186,7 @@ if [ "$AUTO" -eq 1 ] || [ ! -t 0 ] || [ ! -t 1 ]; then
       [ -z "$SELECTED" ] && SELECTED=$(printf '%s\n' "$MODELS" | head -1)
     fi
     _install_service_unit
+    _install_service_unit nullclaw-ui
     _set_gateway_host
     write_config "lemonade/${SELECTED}"
     log "auto-configured lemonade/${SELECTED}"
@@ -193,6 +196,7 @@ if [ "$AUTO" -eq 1 ] || [ ! -t 0 ] || [ ! -t 1 ]; then
     log "configured lemonade/${SELECTED} (non-interactive)"
   fi
   systemctl --user restart "$SERVICE_NAME" >/dev/null 2>&1 || true
+  systemctl --user start nullclaw-ui >/dev/null 2>&1 || true
   exit 0
 fi
 
